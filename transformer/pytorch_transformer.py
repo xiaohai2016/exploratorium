@@ -432,30 +432,6 @@ class SimpleLossCompute:
 
 # ### Greedy Decoding
 
-# Train the simple copy task.
-def copy_data_gen(vocab, batch, nbatches, start_symbol=1):
-    """Generate random data for a src-tgt copy task."""
-    for _ in range(nbatches):
-        data = torch.from_numpy(np.random.randint(1, vocab, size=(batch, 10)))
-        data[:, 0] = start_symbol
-        src = Variable(data, requires_grad=False)
-        tgt = Variable(data, requires_grad=False)
-        yield Batch(src, tgt, 0)
-
-VOCAB = 11
-CRITERION = LabelSmoothing(size=VOCAB, padding_idx=0, smoothing=0.0)
-COPY_MODEL = make_model(VOCAB, VOCAB, layer_count=2)
-COPY_MODEL_OPT = NoamOpt(COPY_MODEL.src_embed[0].d_model, 1, 400, \
-        torch.optim.Adam(COPY_MODEL.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
-
-for epoch in range(10):
-    COPY_MODEL.train()
-    run_epoch(copy_data_gen(VOCAB, 30, 20, start_symbol=1), COPY_MODEL,
-              SimpleLossCompute(COPY_MODEL.generator, CRITERION, COPY_MODEL_OPT))
-    COPY_MODEL.eval()
-    print(run_epoch(copy_data_gen(VOCAB, 30, 5, start_symbol=1), COPY_MODEL, \
-                    SimpleLossCompute(COPY_MODEL.generator, CRITERION, None)))
-
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
     memory = model.encode(src, src_mask)
     out_sofar = torch.ones(1, 1).fill_(start_symbol).type_as(src.data)
@@ -470,8 +446,3 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
         out_sofar = torch.cat([out_sofar, \
                         torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1)
     return out_sofar
-
-COPY_MODEL.eval()
-TEST_SOURCE = Variable(torch.LongTensor([[1, 8, 3, 4, 9, 6, 7, 2, 9, 10]]))
-TEST_SOURCE_MASK = Variable(torch.ones(1, 1, 10) != 0)
-print(greedy_decode(COPY_MODEL, TEST_SOURCE, TEST_SOURCE_MASK, max_len=10, start_symbol=1))
