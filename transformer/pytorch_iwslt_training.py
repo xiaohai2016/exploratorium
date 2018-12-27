@@ -83,8 +83,8 @@ class IWSLTTrainer:
         tokenizer_from = lambda x: [tok.text for tok in spacy_from.tokenizer(x)]
         tokenizer_to = lambda x: [tok.text for tok in spacy_to.tokenizer(x)]
 
-        bos_word = '<bs>'
-        eos_word = '</bs>'
+        bos_word = '<s>'
+        eos_word = '</s>'
         blank_word = '<blank>'
         src_field = data.Field(tokenize=tokenizer_from, pad_token=blank_word)
         tgt_field = data.Field(tokenize=tokenizer_to, init_token=bos_word, \
