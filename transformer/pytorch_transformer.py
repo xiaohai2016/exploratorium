@@ -1,9 +1,8 @@
 """
 My implementation of the Transformer in pytorch
 """
-# pylint: disable=W0221, W0603
+# pylint: disable=W0221
 # W0221: forward overridden with different paramters
-# W0603: use of globals
 
 import math
 import copy
@@ -286,13 +285,10 @@ def make_model(src_vocab, tgt_vocab, d_model=512, d_ff=2048, \
 
 class Batch:
     """
-    Each training sentence pair is transformed into $N$ training
-    sentence pairs, each of which consists the source sentence and
-    a new target sentence formed with the first $k$ tokens from the
-    original target sentence, where $N$ is the total number of tokens
-    in the target sentence and $0 < k < N$. Each newly generated
-    target sentence is associated with a target mask reflecting the
-    number of tokens, $k$, from the original target sentence.
+    Each word in a target training sentence pays attention only
+    to words before it, and hence a target mask is created. Words
+    before the last becomes new training input (self.tgt). And
+    words after the first becomes the label (self.tgt_y).
     """
     def __init__(self, src, tgt=None, pad=0):
         self.src = src
@@ -309,7 +305,7 @@ class Batch:
         tgt_mask = tgt_mask & Variable(subsequent_mask(tgt.size(-1)).type_as(tgt_mask.data))
         return tgt_mask
 
-def run_epoch(batch_iter, full_model, loss_compute):
+def run_epoch(batch_iter, full_model, loss_compute, log_interval=50):
     """
     A Generic Training Loop
     Given a batch data iterator, a model and a loss function, run
@@ -325,33 +321,13 @@ def run_epoch(batch_iter, full_model, loss_compute):
         total_loss += loss
         total_tokens += batch.ntokens
         tokens += batch.ntokens
-        if i % 50 == 1:
+        if i % log_interval == 0:
             elapsed = time.time() - start
             print("Epoch Step: %d Loss: %f Tokens per Sec: %f" % \
                     (i, loss / batch.ntokens, tokens / elapsed))
             start = time.time()
             tokens = 0
     return total_loss / total_tokens
-
-# ### the Batch Size Function
-# The training utilizes [torchtext package](https://github.com/pytorch/text)
-# for accessing datasets and preprocessing. For this purpose and dynamic
-# batching, a batch size calculation function is to be provided.
-
-MAX_SRC_IN_BATCH = 0
-MAX_TGT_IN_BATCH = 0
-def batch_size_fn(new, count, _):
-    "Keep augmenting batch and calculate total number of tokens + padding."
-    global MAX_SRC_IN_BATCH, MAX_TGT_IN_BATCH
-    if count == 1:
-        MAX_SRC_IN_BATCH = 0
-        MAX_TGT_IN_BATCH = 0
-    MAX_SRC_IN_BATCH = max(MAX_SRC_IN_BATCH, len(new.src))
-    MAX_TGT_IN_BATCH = max(MAX_TGT_IN_BATCH, len(new.trg) + 2)
-    # torchtext automatically pads sequences to the maximum sequence length
-    src_elements = count * MAX_SRC_IN_BATCH
-    tgt_elements = count * MAX_TGT_IN_BATCH
-    return max(src_elements, tgt_elements)
 
 class NoamOpt:
     """
@@ -452,3 +428,56 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
         out_sofar = torch.cat([out_sofar, \
                         torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1)
     return out_sofar
+
+class MultiGPULossCompute:
+    """
+    Use mutlipe GPU for loss compute when available
+    """
+    def __init__(self, generator, criterion, opt=None, devices=None, chunk_size=5):
+        self.devices = devices
+        self.generator = generator
+        # criterion does not change during training
+        # replicate at object construction time
+        self.criterion = nn.parallel.replicate(criterion, devices=devices)
+        self.opt = opt
+        self.chunk_size = chunk_size
+
+    def __call__(self, out, target, normalize):
+        # Inference on the generator
+        generator = nn.parallel.replicate(self.generator, devices=self.devices)
+        out_scatter = nn.parallel.scatter(out, target_gpus=self.devices)
+        out_grad = [[] for _ in out_scatter]
+        target_scatter = nn.parallel.scatter(target, target_gpus=self.devices)
+
+        # Divide generating into chunks
+        chunk_size = self.chunk_size
+        for i in range(0, out_scatter[0].size(1), chunk_size):
+            # prediction distribution for a chunk
+            out_column = [[Variable(o[:, i:i + chunk_size].data, \
+                            requires_grad=self.opt is not None)] \
+                            for o in out_scatter]
+            gen = nn.parallel.parallel_apply(generator, out_column)
+            # compute loss for a chunk
+            pred_label = [(g.contiguous().view(-1, g.size(-1)), \
+                  t[:, i:i + chunk_size].contiguous().view(-1)) \
+                     for g, t in zip(gen, target_scatter)]
+            loss = nn.parallel.parallel_apply(self.criterion, pred_label)
+            loss_compute = nn.parallel.gather(loss, target_device=self.devices[0])
+            loss_compute = loss_compute.sum()[0] / normalize
+            total += loss_compute.data[0]
+
+            if self.opt is not None:
+                loss_compute.backward()
+                for j, loss_compute in enumerate(loss):
+                    out_grad[j].append(out_column[j][0].grad.data.clone())
+
+        # Backprop all loss through transformer.
+        if self.opt is not None:
+            out_grad = [Variable(torch.cat(og, dim=1)) for og in out_grad]
+            out1 = out
+            out2 = nn.parallel.gather(out_grad, \
+                                    target_device=self.devices[0])
+            out1.backward(gradient=out2)
+            self.opt.step()
+            self.opt.optimizer.zero_grad()
+        return total * normalize
