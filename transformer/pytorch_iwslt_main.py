@@ -14,4 +14,4 @@ def train_on_one_gpu():
     trainer.run_training(10, log_interval=1)
 
 if __name__ == "__main__":
-    train_on_cpu()
+    train_on_one_gpu()
