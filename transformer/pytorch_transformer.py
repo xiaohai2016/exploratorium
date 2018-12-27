@@ -433,7 +433,7 @@ class MultiGPULossCompute:
     """
     Use mutlipe GPU for loss compute when available
     """
-    def __init__(self, generator, criterion, opt=None, devices=None, chunk_size=5):
+    def __init__(self, generator, criterion, opt=None, devices=None, chunk_size=3):
         self.devices = devices
         self.generator = generator
         # criterion does not change during training
@@ -443,6 +443,7 @@ class MultiGPULossCompute:
         self.chunk_size = chunk_size
 
     def __call__(self, out, target, normalize):
+        total = 0.0
         # Inference on the generator
         generator = nn.parallel.replicate(self.generator, devices=self.devices)
         out_scatter = nn.parallel.scatter(out, target_gpus=self.devices)
@@ -463,8 +464,8 @@ class MultiGPULossCompute:
                      for g, t in zip(gen, target_scatter)]
             loss = nn.parallel.parallel_apply(self.criterion, pred_label)
             loss_compute = nn.parallel.gather(loss, target_device=self.devices[0])
-            loss_compute = loss_compute.sum()[0] / normalize
-            total += loss_compute.data[0]
+            loss_compute = loss_compute.sum() / normalize
+            total += loss_compute.item()
 
             if self.opt is not None:
                 loss_compute.backward()
