@@ -413,16 +413,29 @@ class SimpleLossCompute:
             self.opt.optimizer.zero_grad()
         return loss.data.item() * norm
 
-def greedy_decode(model, src, src_mask, max_len, start_symbol):
+def greedy_decode(model, src, src_mask, max_len, start_symbol, gpu_devices=None):
     """The routine for greeedy decoding"""
-    memory = model.encode(src, src_mask)
+    if gpu_devices is None:
+        memory = model.encode(src, src_mask)
+    else:
+        decoder_par = nn.DataParallel(model.encoder)
+        memory = decoder_par.forward(src, src_mask)
     out_sofar = torch.ones(src.size(0), 1).fill_(start_symbol).type_as(src.data)
     for _ in range(max_len-1):
-        out = model.decode(memory, src_mask, \
+        if gpu_devices is None:
+            out = model.decode(memory, src_mask, \
                            Variable(out_sofar), \
                            Variable(subsequent_mask(out_sofar.size(1)) \
                                     .type_as(src_mask.data)))
-        prob = model.generator(out[:, -1])
+            prob = model.generator(out[:, -1])
+        else:
+            decoder_par = nn.DataParallel(model.decoder)
+            generator_par = nn.DataParallel(model.generator)
+            out = decoder_par.forward(memory, src_mask, \
+                           Variable(out_sofar), \
+                           Variable(subsequent_mask(out_sofar.size(1)) \
+                                    .type_as(src_mask.data)))
+            prob = generator_par.forward(out[:, -1])
         _, next_word = torch.max(prob, dim=1)
         #next_word = next_word.data[0]
         next_word = next_word.unsqueeze(-1)

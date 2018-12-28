@@ -143,7 +143,7 @@ class IWSLTTrainer:
                                 devices=self.devices, opt=None), \
                             log_interval=log_interval)
                 print("Validation loss: ", loss)
-                self.run_evaluation(self.model)
+                self.run_evaluation(self.model, gpu_devices=self.devices)
             else:
                 self.model.train()
                 run_epoch((rebatch(self.pad_idx, b) for b in self.train_iter), \
@@ -159,7 +159,7 @@ class IWSLTTrainer:
                 print("Validation loss: ", loss)
                 self.run_evaluation(self.model)
 
-    def run_evaluation(self, model):
+    def run_evaluation(self, model, gpu_devices=None):
         """
         Compute BLEU score for each test sentence, and the overall average.
         """
@@ -168,7 +168,7 @@ class IWSLTTrainer:
         for _, batch in enumerate(self.valid_iter):
             src = batch.src.transpose(0, 1)
             src_mask = (src != self.src_field.vocab.stoi["<blank>"]).unsqueeze(-2)
-            out = greedy_decode(model, src, src_mask, \
+            out = greedy_decode(model, src, src_mask, gpu_devices=gpu_devices, \
                         max_len=60, start_symbol=self.tgt_field.vocab.stoi["<s>"])
             for hyp in out:
                 hypothesis = []
