@@ -143,7 +143,7 @@ class IWSLTTrainer:
                                 devices=self.devices, opt=None), \
                             log_interval=log_interval)
                 print("Validation loss: ", loss)
-                self.run_evaluation(self.model_par)
+                self.run_evaluation(self.model)
             else:
                 self.model.train()
                 run_epoch((rebatch(self.pad_idx, b) for b in self.train_iter), \
