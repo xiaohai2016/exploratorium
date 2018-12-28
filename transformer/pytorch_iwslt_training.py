@@ -9,6 +9,9 @@ import torch.nn as nn
 
 from torchtext import data, datasets
 import spacy
+from nltk.translate.bleu_score import sentence_bleu
+import numpy as np
+
 from pytorch_transformer import make_model, LabelSmoothing, NoamOpt
 from pytorch_transformer import SimpleLossCompute, run_epoch, Batch
 from pytorch_transformer import MultiGPULossCompute, greedy_decode
@@ -135,49 +138,62 @@ class IWSLTTrainer:
                       log_interval=log_interval)
                 self.model_par.eval()
                 loss = run_epoch((rebatch(self.pad_idx, b) for b in self.valid_iter), \
-                              self.model_par, \
-                              MultiGPULossCompute(self.model.generator, self.criterion, \
+                            self.model_par, \
+                            MultiGPULossCompute(self.model.generator, self.criterion, \
                                 devices=self.devices, opt=None), \
-                              log_interval=log_interval)
-                print(loss)
+                            log_interval=log_interval)
+                print("Validation loss: ", loss)
+                self.run_evaluation(self.model_par)
             else:
                 self.model.train()
                 run_epoch((rebatch(self.pad_idx, b) for b in self.train_iter), \
-                      self.model, \
-                      SimpleLossCompute(self.model.generator, self.criterion, opt=self.model_opt), \
-                      log_interval=log_interval)
+                        self.model, \
+                        SimpleLossCompute(self.model.generator, self.criterion, \
+                                        opt=self.model_opt), \
+                        log_interval=log_interval)
                 self.model.eval()
                 loss = run_epoch((rebatch(self.pad_idx, b) for b in self.valid_iter), \
-                              self.model, \
-                              MultiGPULossCompute(self.model.generator, self.criterion, \
-                                devices=self.devices, opt=None), \
-                              log_interval=log_interval)
-                print(loss)
+                            self.model, \
+                            SimpleLossCompute(self.model.generator, self.criterion, opt=None), \
+                            log_interval=log_interval)
+                print("Validation loss: ", loss)
+                self.run_evaluation(self.model)
 
-    def run_validating(self):
+    def run_evaluation(self, model):
         """
-        Once trained we can decode the model to produce a set of translations.
-        Here we simply translate the first sentence in the validation set. This
-        dataset is pretty small so the translations with greedy search are
-        reasonably accurate.
+        Compute BLEU score for each test sentence, and the overall average.
         """
+        ref_sentences = []
+        hyp_sentences = []
         for _, batch in enumerate(self.valid_iter):
-            src = batch.src.transpose(0, 1)[:1]
+            src = batch.src.transpose(0, 1)
             src_mask = (src != self.src_field.vocab.stoi["<blank>"]).unsqueeze(-2)
-            out = greedy_decode(self.model, src, src_mask, \
+            out = greedy_decode(model, src, src_mask, \
                         max_len=60, start_symbol=self.tgt_field.vocab.stoi["<s>"])
-            print("Translation:", end="\t")
-            for j in range(1, out.size(1)):
-                sym = self.tgt_field.vocab.itos[out[0, j]]
-                if sym == "</s>":
-                    break
-                print(sym, end=" ")
-            print()
-            print("Target:", end="\t")
-            for j in range(1, batch.trg.size(0)):
-                sym = self.tgt_field.vocab.itos[batch.trg.data[j, 0]]
-                if sym == "</s>":
-                    break
-                print(sym, end=" ")
-            print()
-            break
+            for hyp in out:
+                hypothesis = []
+                for j in range(1, hyp.size(0)):
+                    sym = self.tgt_field.vocab.itos[hyp[j]]
+                    if sym == "</s>":
+                        break
+                    hypothesis.append(sym)
+                hyp_sentences.append(hypothesis)
+            tgt = batch.trg.transpose(0, 1)
+            for sen in tgt:
+                reference = []
+                for j in range(1, sen.size(0)):
+                    sym = self.tgt_field.vocab.itos[sen.data[j]]
+                    if sym == "</s>":
+                        break
+                    reference.append(sym)
+                ref_sentences.append(reference)
+
+        assert len(ref_sentences) == len(hyp_sentences)
+        bleu_scores = [sentence_bleu(ref, cand) for \
+                       (ref, cand) in zip(ref_sentences, hyp_sentences)]
+        print("BLEU scores: mean - {:.2f}, max - {:.2f}, min - {:.2f}, std - {:.2f}".format( \
+            np.mean(bleu_scores) * 100, \
+            np.amax(bleu_scores) * 100, \
+            np.amin(bleu_scores) * 100, \
+            np.std(bleu_scores) * 10, \
+            ))

@@ -416,7 +416,7 @@ class SimpleLossCompute:
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
     """The routine for greeedy decoding"""
     memory = model.encode(src, src_mask)
-    out_sofar = torch.ones(1, 1).fill_(start_symbol).type_as(src.data)
+    out_sofar = torch.ones(src.size(0), 1).fill_(start_symbol).type_as(src.data)
     for _ in range(max_len-1):
         out = model.decode(memory, src_mask, \
                            Variable(out_sofar), \
@@ -424,9 +424,10 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
                                     .type_as(src_mask.data)))
         prob = model.generator(out[:, -1])
         _, next_word = torch.max(prob, dim=1)
-        next_word = next_word.data[0]
+        #next_word = next_word.data[0]
+        next_word = next_word.unsqueeze(-1)
         out_sofar = torch.cat([out_sofar, \
-                        torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1)
+                        next_word.type_as(src.data)], dim=1)
     return out_sofar
 
 class MultiGPULossCompute:
