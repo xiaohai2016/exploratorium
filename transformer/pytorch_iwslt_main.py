@@ -5,12 +5,12 @@ from pytorch_iwslt_training import IWSLTTrainer
 
 def train_on_cpu():
     """Run training for IWSLT on CPU for debugging purpose"""
-    trainer = IWSLTTrainer(batch_size=6000)
+    trainer = IWSLTTrainer(batch_size=4000)
     trainer.run_training(10, log_interval=1)
 
 def train_on_one_gpu():
     """Run training for IWSLT on CPU for debugging purpose"""
-    trainer = IWSLTTrainer(use_gpu=True, devices=[0], batch_size=6000)
+    trainer = IWSLTTrainer(use_gpu=True, devices=[0], batch_size=4000)
     trainer.run_training(10, log_interval=10)
 
 def train_on_two_gpu():

@@ -418,10 +418,8 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol, gpu_devices=None)
     if gpu_devices is None:
         memory = model.encode(src, src_mask)
     else:
-        src_embed_par = nn.DataParallel(model.src_embed)
-        src_embed = src_embed_par.forward(src)
-        encoder_par = nn.DataParallel(model.encoder)
-        memory = encoder_par.forward(src_embed, src_mask)
+        src_embed = nn.parallel.data_parallel(model.src_embed, src)
+        memory = nn.parallel.data_parallel(model.encoder, (src_embed, src_mask))
     out_sofar = torch.ones(src.size(0), 1).fill_(start_symbol).type_as(src.data)
     for _ in range(max_len-1):
         if gpu_devices is None:
@@ -431,15 +429,13 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol, gpu_devices=None)
                                     .type_as(src_mask.data)))
             prob = model.generator(out[:, -1])
         else:
-            tgt_embed_par = nn.DataParallel(model.tgt_embed)
-            tgt_embed = tgt_embed_par.forward(Variable(out_sofar))
-            decoder_par = nn.DataParallel(model.decoder)
-            generator_par = nn.DataParallel(model.generator)
-            out = decoder_par.forward(memory, src_mask, \
+            tgt_embed = nn.parallel.data_parallel(model.tgt_embed, Variable(out_sofar))
+            out = nn.parallel.data_parallel(model.decoder, \
+                        (memory, src_mask, \
                            tgt_embed, \
                            Variable(subsequent_mask(out_sofar.size(1)) \
-                                    .type_as(src_mask.data)))
-            prob = generator_par.forward(out[:, -1])
+                                    .type_as(src_mask.data))))
+            prob = nn.parallel.data_parallel(model.generator, out[:, -1])
         _, next_word = torch.max(prob, dim=1)
         #next_word = next_word.data[0]
         next_word = next_word.unsqueeze(-1)
