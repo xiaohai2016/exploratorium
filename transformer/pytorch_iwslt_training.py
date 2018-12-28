@@ -74,7 +74,8 @@ def my_batch_size_fn(new, count, _):
 
 class IWSLTTrainer:
     """The training class utilizes CPU/GPU for training"""
-    def __init__(self, use_gpu=False, devices=None, from_lang="de", to_lang="en"):
+    def __init__(self, use_gpu=False, devices=None, from_lang="de", to_lang="en", \
+                       batch_size=12000):
         self.use_gpu = use_gpu
         self.devices = devices
 
@@ -110,7 +111,6 @@ class IWSLTTrainer:
         if use_gpu:
             self.criterion.cuda()
 
-        batch_size = 12000
         self.train_iter = TightBatchingIterator(self.train, batch_size=batch_size, device=None, \
                             repeat=False, sort_key=lambda x: (len(x.src), len(x.trg)), \
                             batch_size_fn=my_batch_size_fn, train=True)
