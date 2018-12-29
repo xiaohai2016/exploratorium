@@ -197,7 +197,7 @@ class IWSLTTrainer:
         print_count = 0
         for (score, ref, candidate) in zip(bleu_scores, ref_sentences, hyp_sentences):
             print("Score: {0:.2f},\n\t ref:{1}\n\tpred:{2}".format(
-                score, ref, candidate))
+                score * 100, ref, candidate))
             print_count += 1
             if print_count >= max_print:
                 break
