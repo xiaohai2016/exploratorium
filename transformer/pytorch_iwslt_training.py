@@ -191,7 +191,7 @@ class IWSLTTrainer:
                 ref_sentences.append(reference)
 
         assert len(ref_sentences) == len(hyp_sentences)
-        bleu_scores = [sentence_bleu(ref, cand, smoothing_function=smoothie) for \
+        bleu_scores = [sentence_bleu([ref], cand, smoothing_function=smoothie) for \
                        (ref, cand) in zip(ref_sentences, hyp_sentences)]
         max_print = 5
         print_count = 0
