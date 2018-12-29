@@ -10,6 +10,7 @@ import torch.nn as nn
 from torchtext import data, datasets
 import spacy
 from nltk.translate.bleu_score import sentence_bleu
+from nltk.translate.bleu_score import SmoothingFunction
 import numpy as np
 
 from pytorch_transformer import make_model, LabelSmoothing, NoamOpt
@@ -165,6 +166,7 @@ class IWSLTTrainer:
         """
         ref_sentences = []
         hyp_sentences = []
+        smoothie = SmoothingFunction().method0
         for _, batch in enumerate(self.valid_iter):
             src = batch.src.transpose(0, 1)
             src_mask = (src != self.src_field.vocab.stoi["<blank>"]).unsqueeze(-2)
@@ -189,11 +191,11 @@ class IWSLTTrainer:
                 ref_sentences.append(reference)
 
         assert len(ref_sentences) == len(hyp_sentences)
-        bleu_scores = [sentence_bleu(ref, cand) for \
+        bleu_scores = [sentence_bleu(ref, cand, smoothing_function=smoothie) for \
                        (ref, cand) in zip(ref_sentences, hyp_sentences)]
         print("BLEU scores: mean - {:.2f}, max - {:.2f}, min - {:.2f}, std - {:.2f}".format( \
             np.mean(bleu_scores) * 100, \
             np.amax(bleu_scores) * 100, \
             np.amin(bleu_scores) * 100, \
-            np.std(bleu_scores) * 10, \
+            np.std(bleu_scores) * 100, \
             ))
