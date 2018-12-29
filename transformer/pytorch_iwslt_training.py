@@ -130,13 +130,13 @@ class IWSLTTrainer:
         '''Run training for multiple epochs'''
         for _ in range(epoch_count):
             if self.use_gpu:
-                self.model_par.train()
+                self.model.train()
                 run_epoch((rebatch(self.pad_idx, b) for b in self.train_iter), \
                       self.model_par, \
                       MultiGPULossCompute(self.model.generator, self.criterion, \
                                           devices=self.devices, opt=self.model_opt), \
                       log_interval=log_interval)
-                self.model_par.eval()
+                self.model.eval()
                 loss = run_epoch((rebatch(self.pad_idx, b) for b in self.valid_iter), \
                             self.model_par, \
                             MultiGPULossCompute(self.model.generator, self.criterion, \
