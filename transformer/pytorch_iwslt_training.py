@@ -166,7 +166,7 @@ class IWSLTTrainer:
         """
         ref_sentences = []
         hyp_sentences = []
-        smoothie = SmoothingFunction().method0
+        smoothie = SmoothingFunction().method1
         for _, batch in enumerate(self.valid_iter):
             src = batch.src.transpose(0, 1)
             src_mask = (src != self.src_field.vocab.stoi["<blank>"]).unsqueeze(-2)
