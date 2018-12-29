@@ -193,6 +193,14 @@ class IWSLTTrainer:
         assert len(ref_sentences) == len(hyp_sentences)
         bleu_scores = [sentence_bleu(ref, cand, smoothing_function=smoothie) for \
                        (ref, cand) in zip(ref_sentences, hyp_sentences)]
+        max_print = 5
+        print_count = 0
+        for (score, ref, candidate) in zip(bleu_scores, ref_sentences, hyp_sentences):
+            print("Score: [{:%.2f}], ref:\n\t[{:%s}]\ncandidate:\n\t[{:%s}]".format(
+                score, ref, candidate))
+            print_count += 1
+            if print_count >= max_print:
+                break
         print("BLEU scores: mean - {:.2f}, max - {:.2f}, min - {:.2f}, std - {:.2f}".format( \
             np.mean(bleu_scores) * 100, \
             np.amax(bleu_scores) * 100, \
