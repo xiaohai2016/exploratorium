@@ -196,7 +196,7 @@ class IWSLTTrainer:
         max_print = 5
         print_count = 0
         for (score, ref, candidate) in zip(bleu_scores, ref_sentences, hyp_sentences):
-            print("Score: [{:%.2f}], ref:\n\t[{:%s}]\ncandidate:\n\t[{:%s}]".format(
+            print("Score: {0:.2f},\n\t ref:{1}\n\tpred:{2}".format(
                 score, ref, candidate))
             print_count += 1
             if print_count >= max_print:
